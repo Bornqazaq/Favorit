@@ -1,0 +1,193 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================================
+   iMarket — ЦЕНТР УПРАВЛЕНИЯ ЦВЕТАМИ
+   Меняй HEX здесь → изменится на всём сайте.
+   :root = тёмная тема (по умолчанию, чёрная как лого iMarket)
+   [data-theme="light"] = светлая тема
+   ============================================================= */
+
+:root {
+  /* ── Бренд (красный / чёрный / белый) ──────────────────── */
+  --color-brand:              #E11D2E;              /* Логотип, акценты */
+  --color-brand-accent:       #E11D2E;              /* Кнопки, активные состояния */
+  --color-brand-hover:        #C1141F;              /* Кнопки при наведении */
+  --color-brand-muted:        rgba(225,29,46,0.10); /* Фон акцентной карточки */
+  --color-brand-muted-border: rgba(225,29,46,0.24); /* Рамка акцентной карточки */
+  --color-on-brand:           #ffffff;              /* Текст поверх бренд-фона */
+
+  /* ── Акценты «дым» (синий + оранжевый, еле заметные) ───── */
+  --color-accent-blue:    #19A7E8;
+  --color-accent-orange:  #FF7A1A;
+  --smoke-blue:    rgba(25,167,232,0.09);
+  --smoke-orange:  rgba(255,122,26,0.08);
+
+  /* ── Фоны (глубокий чёрный) ────────────────────────────── */
+  --color-bg-main:     #0B0B0D;  /* Основной фон страницы */
+  --color-bg-card:     #141417;  /* Карточки, шапка, футер */
+  --color-bg-elevated: #1C1C21;  /* Внутренние секции, info-блоки */
+  --color-bg-surface:  #24242B;  /* Инпуты, вложенные поверхности */
+  --color-bg-glass:    rgba(11,11,13,0.85);  /* Прозрачная шапка (sticky) */
+
+  /* ── Текст ─────────────────────────────────────────────── */
+  --color-text-main:  #F4F4F6;
+  --color-text-muted: #9A9AA7;
+  --color-text-faint: #5C5C68;
+
+  /* ── Границы ───────────────────────────────────────────── */
+  --color-border:        rgba(255,255,255,0.07);
+  --color-border-bright: rgba(255,255,255,0.13);
+
+  /* ── Прочее ────────────────────────────────────────────── */
+  --color-img-bg:  #ffffff;               /* Подложка под фото товаров */
+  --color-overlay: rgba(0,0,0,0.93);      /* Затемнение при зуме фото */
+
+  /* ── Внешние сервисы (фиксированные цвета) ─────────────── */
+  --color-whatsapp:       #25D366;
+  --color-whatsapp-hover: #1da851;
+  --color-gis:            #19A7E8;
+  --color-gis-hover:      #1391cc;
+}
+
+/* ── СВЕТЛАЯ ТЕМА ──────────────────────────────────────────── */
+[data-theme="light"] {
+  --color-bg-main:     #F5F5F8;
+  --color-bg-card:     #FFFFFF;
+  --color-bg-elevated: #ECECF1;
+  --color-bg-surface:  #E1E1E9;
+  --color-bg-glass:    rgba(255,255,255,0.88);
+
+  --color-text-main:  #0B0B0D;
+  --color-text-muted: #6B6B7A;
+  --color-text-faint: #9999A8;
+
+  --color-border:        rgba(0,0,0,0.07);
+  --color-border-bright: rgba(0,0,0,0.12);
+
+  --color-brand-muted:        rgba(225,29,46,0.07);
+  --color-brand-muted-border: rgba(225,29,46,0.18);
+
+  --smoke-blue:    rgba(25,167,232,0.06);
+  --smoke-orange:  rgba(255,122,26,0.05);
+
+  --color-img-bg:  #f6f6f9;
+  --color-overlay: rgba(11,11,13,0.88);
+}
+
+/* ── «ДЫМ»: декоративный фон с синим и оранжевым свечением ── */
+.smoke-bg { position: relative; overflow: hidden; }
+.smoke-bg::before,
+.smoke-bg::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  filter: blur(46px);
+  z-index: 0;
+}
+.smoke-bg::before {
+  width: 260px; height: 260px;
+  top: -90px; right: -60px;
+  background: radial-gradient(circle, var(--smoke-blue) 0%, transparent 70%);
+  animation: drift 9s ease-in-out infinite alternate;
+}
+.smoke-bg::after {
+  width: 240px; height: 240px;
+  bottom: -100px; left: -50px;
+  background: radial-gradient(circle, var(--smoke-orange) 0%, transparent 70%);
+  animation: drift 11s ease-in-out infinite alternate-reverse;
+}
+.smoke-bg > * { position: relative; z-index: 1; }
+
+/* Текст с градиентом «дым» (синий → оранжевый) */
+.smoke-text {
+  background: linear-gradient(95deg, var(--color-accent-blue), var(--color-accent-orange));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Тонкая градиентная линия-разделитель */
+.smoke-divider {
+  height: 2px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, var(--color-accent-blue), var(--color-brand), var(--color-accent-orange), transparent);
+  opacity: 0.55;
+}
+
+/* ── ЛОГОТИП iMARKET ───────────────────────────────────────── */
+.logo-word {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--color-text-main);
+}
+/* «i» рисуем вручную: белая ножка + ровная красная точка сверху */
+.logo-i {
+  position: relative;
+  display: inline-block;
+  width: 0.16em;
+  height: 0.72em;
+  background: currentColor;
+  border-radius: 0.05em;
+  margin-right: 0.14em;
+  vertical-align: baseline;
+}
+.logo-i::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.1em);
+  transform: translateX(-50%);
+  width: 0.23em;
+  height: 0.23em;
+  background: var(--color-brand);
+  border-radius: 9999px;
+}
+
+/* ── АНИМАЦИИ ───────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.08); }
+}
+@keyframes drift {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(18px, 14px); }
+}
+
+.animate-fadeIn  { animation: fadeIn  0.2s  ease; }
+.animate-fadeUp  { animation: fadeUp  0.25s ease; }
+.animate-pulsate { animation: pulseGlow 3s ease-in-out infinite; }
+
+/* Stagger-анимация для grid-а товаров */
+.stagger > * { animation: fadeUp 0.28s ease both; }
+.stagger > *:nth-child(1)  { animation-delay:   0ms; }
+.stagger > *:nth-child(2)  { animation-delay:  35ms; }
+.stagger > *:nth-child(3)  { animation-delay:  70ms; }
+.stagger > *:nth-child(4)  { animation-delay: 105ms; }
+.stagger > *:nth-child(5)  { animation-delay: 140ms; }
+.stagger > *:nth-child(6)  { animation-delay: 175ms; }
+.stagger > *:nth-child(7)  { animation-delay: 210ms; }
+.stagger > *:nth-child(8)  { animation-delay: 245ms; }
+
+/* ── Скрываем скроллбары (горизонтальные меню) ─────────────── */
+::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
+
+/* ── Базовые стили ──────────────────────────────────────────── */
+html { transition: background-color 0.25s ease, color 0.25s ease; }
+
+body {
+  background-color: var(--color-bg-main);
+  color: var(--color-text-main);
+}

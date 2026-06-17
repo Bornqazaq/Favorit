@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(perl -0pi -e 's/rel=\"noreferrer\"/rel=\"noopener noreferrer\"/g' src/App.jsx)",
+      "Bash(cat \"/Users/nuralizhengisbay/Downloads/favorit_dark_theme_redesign.html\" | head -300)",
+      "Bash(shasum -a 256)",
+      "Bash(awk '{print $1}')",
+      "Bash(npm run *)",
+      "WebSearch",
+      "WebFetch(domain:www.apple.com)",
+      "WebFetch(domain:www.gsmarena.com)",
+      "WebFetch(domain:fdn2.gsmarena.com)"
+    ]
+  }
+}
