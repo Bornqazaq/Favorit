@@ -21,6 +21,7 @@ function Instagram({ size = 18 }) {
 
 import { initialProducts, categoriesData } from './data.js';
 import { config, waLink, telLink } from './config.js';
+import { generateCrmSeed } from './crmSeed.js';
 
 // ── Сжатие фото при загрузке ────────────────────────────────
 const processImageFile = (file, maxWidth, quality) =>
@@ -122,15 +123,10 @@ function Logo({ onClick, onDoubleClick, size = 20 }) {
   return (
     <button
       onClick={handleClick}
-      className="relative flex flex-col items-start select-none shrink-0 leading-none"
-      aria-label={config.brandName}
+      className="shrink-0 select-none px-3.5 py-2 rounded-lg border border-dashed border-borderBright text-textFaint text-[12px] font-bold uppercase tracking-[0.3em] hover:text-textMuted hover:border-brandMutedBorder transition-colors"
+      aria-label="Логотип"
     >
-      <span className="logo-word" style={{ fontSize: `${size}px` }}>
-        {config.brandName}
-      </span>
-      <span className="text-[8px] font-semibold tracking-[0.34em] uppercase text-textFaint mt-0.5 ml-[2px]">
-        {config.city}
-      </span>
+      Лого
     </button>
   );
 }
@@ -168,17 +164,29 @@ function App() {
     return [...catalogWithEdits, ...adminAdded];
   }, [storedProducts, catalogIds]);
 
-  const [storedCrm, setCrmStats] = useLocalStorage('imarket_crm', { views: {}, waClicks: {}, searches: {} });
-  const crmStats = storedCrm && typeof storedCrm === 'object' ? storedCrm : { views: {}, waClicks: {}, searches: {} };
+  const [storedCrm, setCrmStats] = useLocalStorage('imarket_crm', null);
+  const crmStats = storedCrm && Array.isArray(storedCrm.events) ? storedCrm : { events: [] };
+
+  // Первый запуск: если статистики нет — наполняем демо-данными
+  useEffect(() => {
+    if (!storedCrm || !Array.isArray(storedCrm.events) || storedCrm.events.length === 0) {
+      setCrmStats({ events: generateCrmSeed() });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const navigate = (path, params = null) => { window.scrollTo(0, 0); setRoute({ path, params }); };
 
+  // Записываем событие в журнал (с меткой времени — для фильтра по периоду)
   const trackEvent = (type, key) => {
+    if (key === undefined || key === null || key === '') return;
+    const t = type === 'views' ? 'view' : type === 'waClicks' ? 'wa' : type === 'searches' ? 'search' : null;
+    if (!t) return;
     setCrmStats(prev => {
-      const s = { ...prev };
-      if (!s[type]) s[type] = {};
-      s[type][key] = (s[type][key] || 0) + 1;
-      return s;
+      const events = (prev && Array.isArray(prev.events)) ? prev.events : [];
+      const next = [...events, { t, k: key, ts: Date.now() }];
+      const capped = next.length > 8000 ? next.slice(next.length - 8000) : next;
+      return { events: capped };
     });
   };
 
@@ -232,8 +240,8 @@ function App() {
       <footer className="border-t border-borderColor mt-auto">
         <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <span className="logo-word text-[16px]">{config.brandName}</span>
-            <p className="text-[11px] text-textFaint mt-1.5">© {new Date().getFullYear()} {config.brandName} · {config.addressNote}</p>
+            <span className="inline-block px-2.5 py-1 rounded-md border border-dashed border-borderBright text-textFaint text-[11px] font-bold uppercase tracking-[0.3em]">Лого</span>
+            <p className="text-[11px] text-textFaint mt-2">© {new Date().getFullYear()} · {config.addressNote}</p>
           </div>
           <div className="flex items-center gap-2">
             <a href={config.instagram} target="_blank" rel="noopener noreferrer"
@@ -559,8 +567,15 @@ function ProductPage({ navigate, productId, products, trackEvent }) {
 
   useEffect(() => { if (uniqueMemories.length > 0 && !selectedMemory) setSelectedMemory(uniqueMemories[0]); }, [uniqueMemories, selectedMemory]);
   useEffect(() => { if (availableColors.length > 0 && !availableColors.includes(selectedColor)) setSelectedColor(availableColors[0]); }, [availableColors, selectedColor]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (product) trackEvent('views', product.id); }, [product?.id]);
+  // Считаем просмотр один раз на каждый заход в товар (без задвоения в StrictMode)
+  const viewedRef = React.useRef(null);
+  useEffect(() => {
+    if (product && viewedRef.current !== product.id) {
+      viewedRef.current = product.id;
+      trackEvent('views', product.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id]);
 
   if (!product) return <div className="p-8 text-center text-textMuted">Товар не найден</div>;
 
@@ -864,6 +879,199 @@ function SearchPage({ navigate, query, products }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// CRM — статистика: просмотры, переходы в WhatsApp, поиски
+// ═══════════════════════════════════════════════════════════════
+function CrmPanel({ crmStats, products }) {
+  const DAY = 86400000;
+  const [metric, setMetric] = useState('view');       // view | wa | search | category | brand
+  const [query, setQuery] = useState('');
+  const [desc, setDesc] = useState(true);
+  const [period, setPeriod] = useState('month');       // today | week | month | all | custom
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+
+  const allEvents = Array.isArray(crmStats?.events) ? crmStats.events : [];
+
+  // ── Диапазон периода ───────────────────────────────────────
+  const now = Date.now();
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  let from = 0, to = Infinity;
+  if (period === 'today') from = midnight.getTime();
+  else if (period === 'week') from = now - 7 * DAY;
+  else if (period === 'month') from = now - 30 * DAY;
+  else if (period === 'custom') {
+    from = customFrom ? new Date(customFrom).getTime() : 0;
+    to = customTo ? new Date(customTo).getTime() + DAY : Infinity;
+  }
+  const events = allEvents.filter(e => e.ts >= from && e.ts <= to);
+
+  // ── Агрегация ──────────────────────────────────────────────
+  const agg = { view: {}, wa: {}, search: {} };
+  events.forEach(e => { if (agg[e.t]) agg[e.t][e.k] = (agg[e.t][e.k] || 0) + 1; });
+  const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+  const totalViews = sum(agg.view), totalWa = sum(agg.wa), totalSearch = sum(agg.search);
+  const conv = totalViews ? Math.round((totalWa / totalViews) * 100) : 0;
+  const distinctProducts = Object.keys(agg.view).length;
+
+  // дней в периоде (для среднего)
+  let periodDays = 1;
+  if (period === 'week') periodDays = 7;
+  else if (period === 'month') periodDays = 30;
+  else if (period === 'all') {
+    const ts = allEvents.map(e => e.ts);
+    if (ts.length) periodDays = Math.max(1, Math.round((Math.max(...ts) - Math.min(...ts)) / DAY));
+  } else if (period === 'custom' && from > 0 && to < Infinity) {
+    periodDays = Math.max(1, Math.round((to - from) / DAY));
+  }
+  const avgPerDay = Math.round(totalViews / periodDays);
+
+  const prodById = (id) => products.find(p => p.id === id);
+  const nameFor = (id) => prodById(id)?.name || null;
+
+  // ── Метрики ────────────────────────────────────────────────
+  const metrics = [
+    { key: 'view',     label: 'Просмотры', emoji: '👁' },
+    { key: 'wa',       label: 'WhatsApp',  emoji: '💬' },
+    { key: 'search',   label: 'Поиски',    emoji: '🔍' },
+    { key: 'category', label: 'Категории', emoji: '📂' },
+    { key: 'brand',    label: 'Бренды',    emoji: '🏷️' },
+  ];
+  const isProduct = metric === 'view' || metric === 'wa';
+
+  let rows = [];
+  if (isProduct) {
+    const bucket = metric === 'view' ? agg.view : agg.wa;
+    rows = Object.entries(bucket).map(([k, c]) => ({
+      key: k, count: c, name: nameFor(k),
+      secondary: metric === 'view' ? (agg.wa[k] || 0) : (agg.view[k] || 0),
+    })).filter(r => r.name);
+  } else if (metric === 'search') {
+    rows = Object.entries(agg.search).map(([k, c]) => ({ key: k, count: c, name: k, secondary: null }));
+  } else {
+    const map = {};
+    Object.entries(agg.view).forEach(([id, c]) => {
+      const p = prodById(id); if (!p) return;
+      const label = metric === 'category'
+        ? (categoriesData.find(cat => cat.id === p.category)?.name || p.category)
+        : p.brand;
+      map[label] = (map[label] || 0) + c;
+    });
+    rows = Object.entries(map).map(([k, c]) => ({ key: k, count: c, name: k, secondary: null }));
+  }
+
+  const ql = query.trim().toLowerCase();
+  if (ql) rows = rows.filter(r => r.name && r.name.toLowerCase().includes(ql));
+  rows.sort((a, b) => desc ? b.count - a.count : a.count - b.count);
+  const max = Math.max(1, ...rows.map(r => r.count));
+
+  const placeholders = { view: 'Фильтр по товару...', wa: 'Фильтр по товару...', search: 'Фильтр по запросу...', category: 'Фильтр по категории...', brand: 'Фильтр по бренду...' };
+
+  const tiles = [
+    { label: 'Просмотры',  value: totalViews,    emoji: '👁' },
+    { label: 'Заявки (WA)', value: totalWa,      emoji: '💬' },
+    { label: 'Поиски',     value: totalSearch,   emoji: '🔍' },
+    { label: 'Конверсия',  value: conv + '%',    emoji: '⚡' },
+    { label: 'Просм./день', value: avgPerDay,    emoji: '📈' },
+    { label: 'Товаров',    value: distinctProducts, emoji: '🛒' },
+  ];
+
+  const periodChips = [
+    { key: 'today', label: 'Сегодня' },
+    { key: 'week',  label: 'Неделя' },
+    { key: 'month', label: 'Месяц' },
+    { key: 'all',   label: 'Всё' },
+    { key: 'custom', label: 'Период' },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Период */}
+      <div className="flex overflow-x-auto gap-2 pb-0.5" style={{ scrollbarWidth: 'none' }}>
+        {periodChips.map(p => (
+          <button key={p.key} onClick={() => setPeriod(p.key)}
+            className={`flex-shrink-0 px-4 py-2 rounded-full text-[12px] font-medium border transition-colors ${period === p.key ? 'bg-brandAccent text-onBrand border-brandAccent' : 'bg-bgCard text-textMuted border-borderBright hover:border-brandMutedBorder'}`}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Кастомный диапазон дат */}
+      {period === 'custom' && (
+        <div className="flex items-center gap-2 bg-bgCard border border-borderBright rounded-xl p-2.5">
+          <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+            className="flex-1 bg-bgElevated border border-borderColor rounded-lg px-2.5 py-2 text-[12px] text-textMain outline-none focus:border-brandAccent" />
+          <span className="text-textFaint text-[12px]">—</span>
+          <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+            className="flex-1 bg-bgElevated border border-borderColor rounded-lg px-2.5 py-2 text-[12px] text-textMain outline-none focus:border-brandAccent" />
+        </div>
+      )}
+
+      {/* Сводка */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+        {tiles.map(t => (
+          <div key={t.label} className="bg-bgCard border border-borderBright rounded-2xl p-3.5">
+            <div className="text-[18px] leading-none mb-1.5">{t.emoji}</div>
+            <div className="text-[20px] font-extrabold text-textMain leading-none">{t.value}</div>
+            <div className="text-[11px] text-textFaint mt-1">{t.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Переключатель метрик */}
+      <div className="flex overflow-x-auto gap-1.5 bg-bgCard border border-borderBright p-1 rounded-xl" style={{ scrollbarWidth: 'none' }}>
+        {metrics.map(x => (
+          <button key={x.key} onClick={() => setMetric(x.key)}
+            className={`flex-shrink-0 px-3 py-2 text-[12px] font-medium rounded-lg transition-colors ${metric === x.key ? 'bg-brandAccent text-onBrand' : 'text-textMuted'}`}>
+            {x.emoji} {x.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Фильтр + сортировка */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <input value={query} onChange={e => setQuery(e.target.value)}
+            placeholder={placeholders[metric]}
+            className="w-full bg-bgElevated border border-borderColor rounded-xl py-2.5 pl-9 pr-3 text-[13px] text-textMain outline-none focus:border-brandAccent placeholder:text-textFaint" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-textFaint" />
+        </div>
+        <button onClick={() => setDesc(d => !d)}
+          className="px-3 rounded-xl bg-bgElevated border border-borderColor text-textMuted text-[12px] font-medium flex items-center gap-1.5 hover:text-textMain transition-colors shrink-0">
+          <ArrowDownUp size={13} /> {desc ? 'Больше' : 'Меньше'}
+        </button>
+      </div>
+
+      {/* Рейтинг */}
+      <div className="bg-bgCard border border-borderBright rounded-2xl p-2 flex flex-col">
+        {rows.length === 0 ? (
+          <p className="text-textFaint text-[13px] text-center py-8 px-4">За выбранный период данных нет.</p>
+        ) : rows.map((r, i) => (
+          <div key={r.key} className="flex items-center gap-3 px-2.5 py-2.5 rounded-xl hover:bg-bgElevated transition-colors">
+            <span className="text-[11px] font-bold text-textFaint w-5 shrink-0 text-center">{i + 1}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-3 mb-1.5">
+                <span className="text-[13px] text-textMain truncate">{metric === 'search' ? `«${r.name}»` : r.name}</span>
+                <span className="text-[13px] font-bold text-textMain shrink-0">{r.count}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-bgElevated overflow-hidden">
+                <div className="h-full rounded-full bg-brandAccent" style={{ width: `${(r.count / max) * 100}%` }} />
+              </div>
+              {isProduct && (
+                <div className="text-[10px] text-textFaint mt-1">
+                  {metric === 'view' ? `→ написали в WhatsApp: ${r.secondary}` : `просмотров: ${r.secondary}`}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <span className="text-[11px] text-textFaint">Событий за период: {events.length}</span>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // АДМИНКА
 // ═══════════════════════════════════════════════════════════════
 function AdminPage({ products, setProducts, crmStats, isAdmin, setIsAdmin, navigate }) {
@@ -957,23 +1165,7 @@ function AdminPage({ products, setProducts, crmStats, isAdmin, setIsAdmin, navig
 
       {/* CRM */}
       {activeTab === 'crm' && (
-        <div className="bg-bgCard rounded-2xl p-5 border border-borderBright flex flex-col gap-6">
-          {[['views','👁 Топ просмотров'], ['waClicks','💬 Переходы в WhatsApp'], ['searches','🔍 Поиски']].map(([key, label]) => (
-            <div key={key}>
-              <h3 className="font-medium text-[14px] mb-3 text-brand">{label}</h3>
-              {Object.entries(crmStats[key] || {}).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, count]) => {
-                const p = key === 'searches' ? null : products.find(x => x.id === id);
-                const name = key === 'searches' ? `«${id}»` : (p ? p.name : null);
-                return name ? (
-                  <div key={id} className="flex justify-between py-2 border-b border-borderColor text-[13px]">
-                    <span className="text-textMuted truncate mr-4">{name}</span>
-                    <span className="font-medium text-textMain shrink-0">{count}</span>
-                  </div>
-                ) : null;
-              })}
-            </div>
-          ))}
-        </div>
+        <CrmPanel crmStats={crmStats} products={products} />
       )}
 
       {/* Товары */}

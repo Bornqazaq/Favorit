@@ -27,8 +27,8 @@ export const config = {
   // Карта 2ГИС
   gisLink: env.VITE_GIS_LINK || '#',
   gisKey:  env.VITE_2GIS_KEY || '',
-  mapLat:  parseFloat(env.VITE_MAP_LAT) || 51.216649,
-  mapLng:  parseFloat(env.VITE_MAP_LNG) || 51.37787,
+  mapLat:  parseFloat(env.VITE_MAP_LAT) || 51.0894,
+  mapLng:  parseFloat(env.VITE_MAP_LNG) || 71.4188,
 
   // Тексты-преимущества
   warrantyNote: env.VITE_WARRANTY_NOTE || '1 год гарантии',
